@@ -1,0 +1,5 @@
+scikit-learn (Model Training)
+pandas (Xử lý dữ liệu)
+numpy 
+matplotlib / seaborn (Vẽ biểu đồ phân tích)
+Streamlit / Gradio (Tạo giao diện người dùng)
