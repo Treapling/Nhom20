@@ -1,0 +1,31 @@
+STT,Loại Lỗi,Mô Tả Lỗi,Vị Trí,Mức Độ Nghiêm Trọng,Số Lượng Mẫu/Dòng,Khuyến Nghị Sửa Chữa
+1,Thiếu Dữ Liệu (Missing Data),Cột 'Length' thiếu 26037 giá trị (50.7% dữ liệu),EDA(real).ipynb,Cao,26037,Sử dụng chiến lược imputation hoặc loại bỏ các hàng có Length=NULL
+2,Thiếu Dữ Liệu (Missing Data),Cột 'Direction' thiếu 40630 giá trị (79.2% dữ liệu),Preprocessing.ipynb,Cao,40630,Xem xét loại bỏ cột hoặc sử dụng mode imputation
+3,Thiếu Dữ Liệu (Missing Data),Cột 'Bedrooms' thiếu 34662 giá trị (67.5% dữ liệu),EDA(real).ipynb,Cao,34662,Sử dụng median/mean imputation cho các thuộc tính xây dựng
+4,Thiếu Dữ Liệu (Missing Data),Cột 'Bathrooms' thiếu 40540 giá trị (79% dữ liệu),Preprocessing.ipynb,Cao,40540,Cân nhắc loại bỏ cột hoặc imputation
+5,Thiếu Dữ Liệu (Missing Data),Cột 'Floors' thiếu 42624 giá trị (83.1% dữ liệu),EDA(real).ipynb,Rất Cao,42624,Xem xét loại bỏ cột này khỏi mô hình
+6,Thiếu Dữ Liệu (Missing Data),Cột 'Latitude' và 'Longitude' thiếu 29856 giá trị (58.2% dữ liệu),EDA(real).ipynb,Cao,29856,Sử dụng reverse geocoding hoặc imputation dựa trên Location
+7,Thiếu Dữ Liệu (Missing Data),Cột 'Area' thiếu 104 giá trị,Preprocessing.ipynb,Trung Bình,104,Sử dụng median imputation
+8,Thiếu Dữ Liệu (Missing Data),Cột 'Agent Name' thiếu 929 giá trị,EDA(real).ipynb,Thấp,929,Điền giá trị mặc định hoặc loại bỏ
+9,Outlier - Giá Quá Cao,Giá tối đa: 660,000,000 (không hợp lý cho thị trường bất động sản),Baseline_Linear Regression.ipynb,Cao,Nhiều,Áp dụng phương pháp outlier detection (IQR hoặc Z-score)
+10,Outlier - Diện Tích Quá Lớn,Area tối đa: 1,578,861,000 m² (không thực tế),EDA(real).ipynb,Rất Cao,Nhiều,Loại bỏ hoặc capping dữ liệu ngoại lệ
+11,Outlier - Chiều Dài Quá Lớn,Length tối đa: 90,000 m (không hợp lý),Preprocessing.ipynb,Rất Cao,Nhiều,Sử dụng IQR hoặc Z-score để loại bỏ
+12,Outlier - Chiều Rộng Quá Lớn,Width tối đa: 50,000 m (không hợp lý),EDA(real).ipynb,Rất Cao,Nhiều,Sử dụng IQR hoặc Z-score để loại bỏ
+13,Outlier - Phòng Ngủ,Bedrooms tối đa: 6902 (không hợp lý),EDA(real).ipynb,Rất Cao,Nhiều,Loại bỏ hoặc capping ở mức hợp lý (tối đa 10-15)
+14,Outlier - Tầng,Floors có giá trị âm: -2.0 (không hợp lý),EDA(real).ipynb,Rất Cao,Ít,Loại bỏ các giá trị âm hoặc không hợp lý
+15,Lỗi Phân Tích - R² âm,R² Score = -0.0052 (mô hình Linear Regression tệ),Baseline_Linear Regression.ipynb,Rất Cao,9258 mẫu test,Xem xét sử dụng mô hình phức tạp hơn (Random Forest, XGBoost, Neural Network)
+16,Lỗi Dự Báo - MAPE cao,MAPE = 356.80% (dự báo rất kém),Baseline_Linear Regression.ipynb,Rất Cao,9258 mẫu test,Cải thiện feature engineering hoặc thử mô hình khác
+17,Lỗi Dự Báo - MAE lớn theo phân khúc,Phân khúc cao (>15 tỷ): MAE = 44,932.27,Baseline_Linear Regression.ipynb,Rất Cao,2137 mẫu,Mô hình không tốt cho phân khúc cao - cần xử lý riêng biệt
+18,Lỗi Overflow - Tràn Số,y_pred_log có giá trị âm: -4141.34 (gây ra predicted price sai lệch),Baseline_Linear Regression.ipynb,Cao,Nhiều,Clip dự báo log-space trước khi inverse transform
+19,Lỗi Dữ Liệu - Giá Âm,Price tối thiểu = 0 (có thể là dữ liệu lỗi),Preprocessing.ipynb,Trung Bình,122 dòng,Loại bỏ hoặc kiểm tra lại dữ liệu gốc
+20,Lỗi Dọn Dẹp Dữ Liệu,Mẫu không hợp lệ được loại bỏ: 122 hàng,Preprocessing.ipynb,Thấp,122,Đã xử lý chính xác - không có vấn đề
+21,Lỗi Encoding - Latitude/Longitude,Latitude min = 0.708 (bất thường); Longitude có giá trị 1.065e+11 (sai lệch),EDA(real).ipynb,Cao,29856 hàng,Kiểm tra lại logic encoding hoặc sử dụng validation
+22,Lỗi Đặc Trưng - Alley Width,Alley Width tối đa: 999,999.99 (rõ ràng là lỗi dữ liệu),EDA(real).ipynb,Cao,Nhiều,Sử dụng capping hoặc loại bỏ các giá trị ngoại lệ
+23,Lỗi Tiền Xử Lý - Không Chuẩn Hóa,Dữ liệu không được chuẩn hóa (StandardScaler) trước khi sử dụng,Baseline_Linear Regression.ipynb,Trung Bình,Toàn bộ,Chuẩn hóa tất cả các đặc trưng số trước khi training
+24,Lỗi Mô Hình - Tuyến Tính Yếu,Mô hình Linear Regression không phù hợp với dữ liệu phức tạp,Baseline_Linear Regression.ipynb,Rất Cao,Toàn bộ,Sử dụng mô hình phi tuyến: Random Forest, Gradient Boosting, XGBoost
+25,Lỗi Chiến Lược - Log Transform,Sử dụng log transform nhưng có vấn đề với giá trị âm trong predicted log-space,Baseline_Linear Regression.ipynb,Cao,Một số mẫu,Thêm constant trước log transform hoặc sử dụng Box-Cox transform
+26,Thiếu Tối Ưu Hóa Siêu Tham Số,Không có tuning hyperparameter cho Linear Regression,Baseline_Linear Regression.ipynb,Thấp,Toàn bộ,Sử dụng GridSearchCV hoặc RandomSearchCV
+27,Lỗi Cross-Validation,Không sử dụng cross-validation để đánh giá mô hình,Baseline_Linear Regression.ipynb,Trung Bình,Toàn bộ,Sử dụng k-fold cross-validation để đánh giá mô hình ổn định hơn
+28,Lỗi Feature Engineering,Thiếu các đặc trưng tương tác hoặc đặc trưng polynomial,Preprocessing.ipynb,Trung Bình,Toàn bộ,Tạo các đặc trưng tương tác: Area * Bedrooms; Price_per_m2
+29,Lỗi Categorical Encoding,Các cột categorical (District, Property Type, Direction) được one-hot encode nhưng có thể có quá nhiều độc lập,Preprocessing.ipynb,Trung Bình,59 cột,Xem xét sử dụng target encoding hoặc ordinal encoding
+30,Lỗi Dữ Liệu Cân Bằng,Phân khúc cao có ít mẫu hơn (2137 mẫu so với 3896 phân khúc thấp),Preprocessing.ipynb,Trung Bình,Chênh lệch,Sử dụng SMOTE hoặc weighted loss để cân bằng
