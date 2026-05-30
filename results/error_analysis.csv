@@ -1,0 +1,16 @@
+Model,MAE_Million_VND,RMSE_Million_VND,MAPE_Percent,R2_Score,Median_Error_Million_VND,Error_Category,Issue_Type,Severity,Recommended_Fix
+Dummy Regressor,30838.68,155353.44,204.45,-0.0189,5287.70,Poor Model Performance,Baseline model predicting mean - no learning,High,Replace with better baseline or feature engineering
+Linear Regression,28962.26,155259.37,173.86,-0.0177,3588.66,Underfitting,Model too simple for complex relationships,High,Use polynomial features or non-linear models
+Ridge,28962.84,155254.02,173.90,-0.0176,3583.91,Underfitting,L2 Regularization insufficient,High,Reduce regularization or increase model complexity
+Lasso,30838.68,155353.44,204.45,-0.0189,5287.70,Feature Elimination,Over-regularization eliminating important features,High,Reduce L1 penalty or use elastic net
+Random Forest,25370.05,141614.90,131.32,0.1533,2172.37,Moderate - Better Performance,Tree ensemble improving non-linear patterns,Low,Monitor for overfitting on unseen data
+XGBoost,25434.27,147166.51,124.40,0.0856,2437.35,Moderate - Better Performance,Gradient boosting capturing patterns,Low,Fine-tune hyperparameters for further improvement
+Gradient Boosting,26829.74,152039.47,161.10,0.0241,3031.91,Moderate Performance,Standard boosting working reasonably,Medium,Increase number of estimators
+LightGBM,25785.06,150822.75,153.78,0.0396,2677.28,Moderate - Better Performance,Fast gradient boosting with good balance,Low,Best production model - further optimization needed
+Stacking (XGBoost+LightGBM+RF),20222.61,149703.76,147.16,0.0538,2614.19,Ensemble Method,Meta-learner combining base models,Low,Explore advanced stacking configurations
+High-Price Segment (>15B),44932.27,N/A,N/A,N/A,N/A,Severe Outlier Error,Baseline Linear model fails on luxury properties,Critical,Separate model for luxury segment or robust scaling
+Low-Price Segment (<5B),3137.91,N/A,N/A,N/A,N/A,Better Performance,More stable prediction for budget segment,Low,Focus on this segment for initial deployment
+Mid-Price Segment (5-15B),4172.64,N/A,N/A,N/A,N/A,Acceptable Performance,Moderate accuracy for mid-range properties,Medium,Balance between accuracy and coverage
+Data Quality,N/A,N/A,N/A,N/A,N/A,Feature Engineering Gap,Limited feature engineering in baseline notebook,Medium,Add interaction terms and domain features
+Overflow Issue,N/A,N/A,N/A,N/A,N/A,Log Transform Clipping,Predictions clipped to 0-19 range to prevent overflow,Medium,Investigate log-space predictions or scaling
+Prediction Range,N/A,N/A,N/A,N/A,N/A,Narrow Range,Model predicting too narrow range of values,High,Add more distinctive features or reduce regularization
