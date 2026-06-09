@@ -1,15 +1,11 @@
 # app.py
 # Streamlit web demo for "Dự đoán giá nhà TP.HCM" — Nhóm 20
-# Chạy: streamlit run app.py
-#
-# Yêu cầu: có file dữ liệu mẫu cleaned_test.csv
-# và / hoặc mô hình đã lưu tại `results/stacking_model.pkl` hoặc `results/random_forest_model.pkl`.
-#
-# Mô tả: Tạo 1 hàng dữ liệu có đúng cấu trúc (74 cột) tương tự cleaned_test,
-# build feature (Area_per_Bedroom), gọi model.predict() (log1p space) và hiển thị giá thực tế bằng np.expm1()
+# Chạy: streamlit run demo/app.py
 
 import os
+import sys
 import unicodedata
+import math
 from typing import List, Optional
 
 import joblib
@@ -18,557 +14,281 @@ import pandas as pd
 import streamlit as st
 import glob
 
+# ==========================================
+# THIẾT LẬP ĐƯỜNG DẪN VÀ SYSTEM PATH (QUAN TRỌNG)
+# ==========================================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
+RESULTS_DIR = os.path.join(PROJECT_ROOT, "results")
+DATA_DIR = os.path.join(PROJECT_ROOT, "data", "processed")
+
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+# ---------------------------
+# TỪ ĐIỂN TỌA ĐỘ (QUẬN -> PHƯỜNG)
+# Dùng để nội suy chính xác Tọa độ và Khoảng cách Haversine
+# ---------------------------
+LOCATION_DATA = {
+    "Quận 1": {"Phường Bến Nghé": (10.7769, 106.7032), "Phường Bến Thành": (10.7724, 106.6981), "Phường Đa Kao": (10.7894, 106.6975), "Phường khác (Q1)": (10.7756, 106.7019)},
+    "Quận 2": {"Phường Thảo Điền": (10.8062, 106.7371), "Phường An Phú": (10.8016, 106.7480), "Phường Thủ Thiêm": (10.7735, 106.7168), "Phường khác (Q2)": (10.7872, 106.7496)},
+    "Quận 3": {"Phường Võ Thị Sáu": (10.7843, 106.6816), "Phường 14": (10.7885, 106.6811), "Phường khác (Q3)": (10.7843, 106.6816)},
+    "Quận 4": {"Phường 1": (10.7588, 106.7014), "Phường 13": (10.7631, 106.7047), "Phường khác (Q4)": (10.7588, 106.7014)},
+    "Quận 5": {"Phường 4": (10.7592, 106.6713), "Phường 11": (10.7550, 106.6625), "Phường khác (Q5)": (10.7540, 106.6635)},
+    "Quận 6": {"Phường 1": (10.7480, 106.6341), "Phường 10": (10.7385, 106.6321), "Phường khác (Q6)": (10.7480, 106.6341)},
+    "Quận 7": {"Phường Tân Phong (Phú Mỹ Hưng)": (10.7313, 106.7121), "Phường Tân Thuận Đông": (10.7501, 106.7410), "Phường khác (Q7)": (10.7339, 106.7262)},
+    "Quận 8": {"Phường 4": (10.7371, 106.6738), "Phường 15": (10.7200, 106.6310), "Phường khác (Q8)": (10.7241, 106.6231)},
+    "Quận 9": {"Phường Long Bình": (10.8427, 106.8285), "Phường Phú Hữu": (10.7961, 106.7937), "Phường khác (Q9)": (10.8277, 106.8049)},
+    "Quận 10": {"Phường 12": (10.7743, 106.6669), "Phường 14": (10.7711, 106.6578), "Phường khác (Q10)": (10.7743, 106.6669)},
+    "Quận 11": {"Phường 3": (10.7661, 106.6450), "Phường 15": (10.7705, 106.6551), "Phường khác (Q11)": (10.7628, 106.6433)},
+    "Quận 12": {"Phường Tân Chánh Hiệp": (10.8671, 106.6413), "Phường An Phú Đông": (10.8465, 106.6905), "Phường khác (Q12)": (10.8671, 106.6413)},
+    "Gò Vấp": {"Phường 10": (10.8326, 106.6653), "Phường 17": (10.8431, 106.6751), "Phường khác (Gò Vấp)": (10.8386, 106.6653)},
+    "Bình Thạnh": {"Phường 22 (Vinhomes)": (10.7946, 106.7214), "Phường 25": (10.8035, 106.7150), "Phường khác (Bình Thạnh)": (10.8105, 106.7091)},
+    "Tân Bình": {"Phường 2 (Sân bay)": (10.8115, 106.6644), "Phường 13": (10.8014, 106.6410), "Phường khác (Tân Bình)": (10.8014, 106.6525)},
+    "Bình Tân": {"Phường Bình Trị Đông B": (10.7511, 106.6135), "Phường An Lạc": (10.7255, 106.6061), "Phường khác (Bình Tân)": (10.7652, 106.6038)},
+    "Phú Nhuận": {"Phường 1": (10.7951, 106.6858), "Phường 9": (10.8031, 106.6751), "Phường khác (Phú Nhuận)": (10.7991, 106.6788)},
+    "Thủ Đức": {"Phường Linh Chiểu": (10.8521, 106.7585), "Phường Hiệp Bình Chánh": (10.8265, 106.7258), "Phường khác (Thủ Đức)": (10.8494, 106.7537)},
+    "Huyện Nhà Bè": {"Xã Phước Kiển": (10.6975, 106.7121), "Thị trấn Nhà Bè": (10.6805, 106.7351), "Xã khác (Nhà Bè)": (10.6952, 106.7435)},
+    "Huyện Củ Chi": {"Thị trấn Củ Chi": (10.9755, 106.4951), "Xã Tân Thạnh Đông": (10.9411, 106.5821), "Xã khác (Củ Chi)": (11.0066, 106.5050)},
+    "Huyện Hóc Môn": {"Thị trấn Hóc Môn": (10.8841, 106.5925), "Xã Bà Điểm": (10.8351, 106.5985), "Xã khác (Hóc Môn)": (10.8841, 106.5925)},
+    "Huyện Cần Giờ": {"Thị trấn Cần Thạnh": (10.4075, 106.9601), "Xã Bình Khánh": (10.6651, 106.7621), "Xã khác (Cần Giờ)": (10.4542, 106.8732)},
+    "Bình Chánh": {"Xã Bình Hưng": (10.7255, 106.6681), "Thị trấn Tân Túc": (10.6811, 106.5901), "Xã khác (Bình Chánh)": (10.7091, 106.5516)}
+}
+
 # ---------------------------
 # Helpers
 # ---------------------------
-
-
-def normalize_text(s: str) -> str:
-    """Chuẩn hóa chuỗi: lowercase, remove diacritics, strip."""
-    if not isinstance(s, str):
-        return ""
-    s = s.lower().strip()
-    s = unicodedata.normalize("NFKD", s)
-    s = "".join(ch for ch in s if not unicodedata.combining(ch))
-    s = s.replace(".", "").replace(",", "").replace("  ", " ")
-    return s
-
-
-def find_best_district_column(district: str, cols: List[str]) -> Optional[str]:
-    """
-    Tìm cột district trong template bằng cách so sánh hậu tố của cột (sau 'District_')
-    với giá trị chọn của user bằng cách normalize cả hai chuỗi.
-    Trả về tên cột tìm được hoặc None nếu không tìm thấy.
-    """
-    target_norm = normalize_text(district)
-    # candidates are columns that start with District_ (case sensitive in template)
-    district_cols = [c for c in cols if c.lower().startswith("district_")]
-    # compare normalized suffixes
-    for c in district_cols:
-        suffix = c[len("District_") :]
-        if normalize_text(suffix) == target_norm:
-            return c
-    # If exact match not found, try contains
-    for c in district_cols:
-        suffix = c[len("District_") :]
-        if target_norm in normalize_text(suffix) or normalize_text(suffix) in target_norm:
-            return c
-    return None
-
-
 def format_price_triệu(price_triệu: float) -> str:
-    """
-    Hiển thị giá: nếu >= 1000 Triệu -> show in Tỷ VNĐ, else show Triệu VNĐ.
-    price_triệu: số thực (triệu VND)
-    """
     if price_triệu >= 1000:
         price_tỷ = price_triệu / 1000.0
         return f"{price_tỷ:,.2f} Tỷ VNĐ"
     else:
         return f"{price_triệu:,.0f} Triệu VNĐ"
 
+def calculate_haversine_distance(lat1, lon1, lat2=10.7756, lon2=106.7019):
+    """Tính khoảng cách tuyệt đối đến trung tâm Quận 1"""
+    R = 6371.0
+    dLat, dLon = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
+    a = math.sin(dLat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dLon/2)**2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
 # ---------------------------
 # Caching resources (models & template)
 # ---------------------------
-
 @st.cache_resource
 def load_model_from_disk() -> Optional[object]:
-    """
-    Thử load model theo thứ tự ưu tiên:
-    1) results/stacking_model.pkl
-    2) results/random_forest_model.pkl
-    Nếu không có, trả về None.
-    """
     candidates = [
-        os.path.join("results", "stacking_model.pkl"),
-        os.path.join("results", "random_forest_model.pkl"),
+        os.path.join(RESULTS_DIR, "tuned_lightgbm.pkl"),
+        os.path.join(RESULTS_DIR, "tuned_random_forest.pkl"),
+        os.path.join(RESULTS_DIR, "tuned_xgboost.pkl"),
     ]
-    last_exc = None
+    all_pkls = glob.glob(os.path.join(RESULTS_DIR, "*.pkl"))
+    for pkl in all_pkls:
+        if pkl not in candidates: candidates.append(pkl)
+
+    errors = []
     for p in candidates:
-        abs_p = os.path.abspath(p)
-        print(f"[DEBUG] Checking model path: {abs_p} (exists={os.path.exists(p)})")
         if os.path.exists(p):
             try:
-                model = joblib.load(p)
-                print(f"[DEBUG] Loaded model from {abs_p}")
-                return model
+                loaded_obj = joblib.load(p)
+                if isinstance(loaded_obj, dict):
+                    for key, val in loaded_obj.items():
+                        if hasattr(val, 'predict'): return val
+                return loaded_obj
             except Exception as e:
-                last_exc = e
-                print(f"[DEBUG] Failed to load {abs_p}: {e}")
-                # continue to next candidate
-    # nếu không load được file nào, trả về None
+                errors.append(f"Lỗi đọc file {os.path.basename(p)}: {e}")
+                
+    for err in errors: st.sidebar.error(f"⚠️ {err}")
     return None
 
-
 @st.cache_resource
-def load_template_columns(path: str = "data/processed/cleaned_test.csv") -> Optional[List[str]]:
-    """
-    Load một hàng mẫu từ cleaned_test để lấy danh sách cột (cấu trúc 74 cột).
-    Nếu file không tồn tại hoặc lỗi đọc, trả về None.
-    """
+def load_model_path(path: str):
+    if path is None: return None
     try:
-        df_template = pd.read_csv(path, nrows=5)  # chỉ cần header
-        return list(df_template.columns)
-    except Exception:
+        if os.path.exists(path): 
+            loaded_obj = joblib.load(path)
+            if isinstance(loaded_obj, dict):
+                for key, val in loaded_obj.items():
+                    if hasattr(val, 'predict'): return val
+                st.sidebar.error(f"⚠️ File chứa dictionary nhưng không có model nào.")
+            return loaded_obj
+    except Exception as e:
+        st.sidebar.error(f"⚠️ Lỗi giải mã file {os.path.basename(path)}: {e}")
         return None
 
+@st.cache_resource
+def load_preprocessor():
+    path = os.path.join(RESULTS_DIR, "preprocessor.pkl")
+    if os.path.exists(path):
+        try:
+            return joblib.load(path)
+        except Exception as e:
+            st.sidebar.error(f"⚠️ File preprocessor.pkl tồn tại nhưng bị lỗi giải mã: {e}")
+            return None
+    return None
 
 # ---------------------------
 # Build UI
 # ---------------------------
-
 st.set_page_config(page_title="Demo Dự đoán Giá Nhà TP.HCM — Nhóm 20", layout="wide")
 st.title("Demo: Dự đoán Giá Nhà TP.HCM (Nhóm 20)")
-st.write("Ứng dụng demo: nhập thông tin bất động sản, nhấn 🚀 để nhận dự đoán tham khảo từ mô hình.")
+st.write("Ứng dụng demo: Nhập thông tin bất động sản, hệ thống sẽ sử dụng mô hình AI kết hợp quy tắc thị trường để dự đoán giá trị BĐS và sự chênh lệch giá giữa Chính chủ và Môi giới.")
 
-# Sidebar: Input controls
-st.sidebar.header("Thông tin bất động sản (Input)")
+st.sidebar.header("Thông tin bất động sản")
 
-# Model selector: list .pkl files in results/
-model_files = sorted(glob.glob(os.path.join('results', '*.pkl')))
-model_options = ['Auto'] + [os.path.basename(p) for p in model_files]
-selected_model_file = st.sidebar.selectbox("Chọn file mô hình (Auto chọn stacking/rf)", model_options, index=0)
+# 1. Nạp Model
+model_files = sorted(glob.glob(os.path.join(RESULTS_DIR, '*.pkl')))
+model_options = ['Auto'] + [os.path.basename(p) for p in model_files if "preprocessor" not in p]
+selected_model_file = st.sidebar.selectbox("Chọn mô hình dự đoán", model_options, index=0)
 
-# Whitelist Quận/Huyện (thêm/bớt theo dataset thực tế)
-DISTRICT_WHITELIST = [
-    "Quận 1",
-    "Quận 2",
-    "Quận 3",
-    "Quận 4",
-    "Quận 5",
-    "Quận 6",
-    "Quận 7",
-    "Quận 8",
-    "Quận 9",
-    "Quận 10",
-    "Quận 11",
-    "Quận 12",
-    "Gò Vấp",
-    "Bình Thạnh",
-    "Tân Bình",
-    "Bình Tân",
-    "Phú Nhuận",
-    "Thủ Đức",
-    "Huyện Nhà Bè",
-    "Huyện Củ Chi",
-    "Huyện Hóc Môn",
-    "Huyện Cần Giờ",
-    "Bình Chánh",
-]
-district = st.sidebar.selectbox("Chọn Quận/Huyện", DISTRICT_WHITELIST, index=0)
+model = load_model_from_disk() if selected_model_file == 'Auto' else load_model_path(os.path.join(RESULTS_DIR, selected_model_file))
+preprocessor = load_preprocessor()
 
-area = st.sidebar.number_input("Diện tích (m²)", min_value=10.0, max_value=500.0, value=60.0, step=1.0)
-bedrooms = st.sidebar.number_input("Số phòng ngủ", min_value=1, max_value=10, value=2, step=1)
-alley_width = st.sidebar.number_input(
-    "Độ rộng hẻm (m) — nhập 0 nếu nhà mặt tiền", min_value=0.0, max_value=20.0, value=4.0, step=0.5
-)
-# Thêm biến phân loại phụ
-has_so_hong = st.sidebar.selectbox("Pháp lý", ["Sổ hồng", "Không rõ / Chưa có", "Sổ đỏ"])
-property_type = st.sidebar.selectbox("Loại BĐS (tuỳ chọn)", ["Nhà riêng", "Chung cư", "Đất", "Văn phòng", "Khác"])
-# New inputs: bathrooms, direction, floors, road type, position
-bathrooms = st.sidebar.number_input("Số phòng tắm", min_value=0, max_value=10, value=1, step=1)
-direction = st.sidebar.selectbox("Hướng nhà", ["Không rõ", "Bắc", "Nam", "Đông", "Tây", "Đông Bắc", "Tây Bắc", "Đông Nam", "Tây Nam"]) 
-floors = st.sidebar.number_input("Số lầu (tầng)", min_value=0, max_value=50, value=1, step=1)
-road_type = st.sidebar.selectbox("Loại đường", ["Không rõ", "Đường nhựa", "Đường bê tông", "Đường đất", "Đường đá", "Khác"]) 
-position = st.sidebar.selectbox("Vị trí (position)", ["Không rõ", "Đường chính", "Hẻm", "Trong ngõ", "Góc nhà", "Mặt tiền"]) 
-
-house_grade = st.sidebar.selectbox(
-    "Cấp nhà",
-    ["Không rõ", "Cấp 1", "Cấp 2", "Cấp 3", "Cấp 4"],
-    index=0,
-)
-
-
-# Load resources
-
-@st.cache_resource
-def load_model_path(path: str):
-    if path is None:
-        return None
-    try:
-        if os.path.exists(path):
-            return joblib.load(path)
-    except Exception:
-        return None
-
-
-if selected_model_file == 'Auto':
-    model = load_model_from_disk()
+# Trạng thái hệ thống
+if model is None or preprocessor is None:
+    st.sidebar.error("❌ Thiếu file Model hoặc Preprocessor trong thư mục results/")
 else:
-    model = load_model_path(os.path.join('results', selected_model_file))
-
-template_cols = load_template_columns()
-
-# Show model status
-if model is None:
-    st.sidebar.error(
-        "Không tìm thấy file mô hình trong `results/stacking_model.pkl` hoặc `results/random_forest_model.pkl`.\n"
-        "Vui lòng đặt file .pkl vào thư mục results."
-    )
-else:
-    st.sidebar.success("Mô hình đã sẵn sàng (đã load).")
-
-if template_cols is None:
-    st.sidebar.warning(
-        "Không tìm thấy cleaned_test.csv. Ứng dụng sẽ cố gắng tạo template cột mặc định."
-    )
-else:
-    st.sidebar.info(f"Template features loaded ({len(template_cols)} cột).")
-    if selected_model_file != 'Auto':
-        st.sidebar.info(f"Selected model file: {selected_model_file}")
-
+    st.sidebar.success("✅ Hệ thống AI đã sẵn sàng.")
 st.sidebar.markdown("---")
-st.sidebar.caption("Nhóm 20 — Dự án: Dự đoán giá nhà TP.HCM")
 
-# Main: prepare row and predict
-st.header("1) Xem trước dữ liệu đầu vào được gửi vào mô hình")
-col1, col2 = st.columns([0.6, 0.4])
+# 2. Thu thập dữ liệu Vị trí (Quận -> Phường)
+district = st.sidebar.selectbox("Chọn Quận/Huyện", list(LOCATION_DATA.keys()), index=0)
+ward_options = list(LOCATION_DATA[district].keys())
+ward = st.sidebar.selectbox("Chọn Phường/Xã", ward_options, index=0)
 
-with col1:
-    st.subheader("Giá trị nhập")
-    st.write("- Template columns loaded:", len(template_cols) if template_cols is not None else "None")
-    # show which model files exist
-    stacking_exists = os.path.exists(os.path.join('results','stacking_model.pkl'))
-    rf_exists = os.path.exists(os.path.join('results','random_forest_model.pkl'))
-    st.write("- Stacking model file:", "Yes" if stacking_exists else "No")
-    st.write("- RandomForest model file:", "Yes" if rf_exists else "No")
-    st.write(f"- Diện tích: **{area} m²**")
-    st.write(f"- Số phòng ngủ: **{int(bedrooms)}**")
-    st.write(f"- Độ rộng hẻm: **{alley_width} m**")
-    st.write(f"- Pháp lý: **{has_so_hong}**")
-    st.write(f"- Loại BĐS: **{property_type}**")
-    st.write(f"- Số phòng tắm: **{int(bathrooms)}**")
-    st.write(f"- Hướng nhà: **{direction}**")
-    st.write(f"- Số lầu: **{int(floors)}**")
-    st.write(f"- Loại đường: **{road_type}**")
-    st.write(f"- Vị trí: **{position}**")
-    st.write(f"- Cấp nhà: **{house_grade}**")
+# Lấy tọa độ dựa trên Phường đã chọn
+selected_lat, selected_lon = LOCATION_DATA[district][ward]
 
-with col2:
-    st.subheader("Ghi chú")
-    st.info(
-        "Mô hình được huấn luyện với target đã log1p. Ứng dụng sẽ expm1() để trả về giá thực tế (Triệu VNĐ)."
-    )
+# 3. Thu thập dữ liệu Vật lý
+area = st.sidebar.number_input("Diện tích (m²)", min_value=10.0, max_value=1000.0, value=60.0, step=1.0)
+width = st.sidebar.number_input("Chiều ngang mặt tiền (m)", min_value=1.0, max_value=100.0, value=4.0, step=0.1)
 
-# Build feature vector with the same order and columns as template
-def build_feature_row(
-    selected_district: str,
-    area: float,
-    bedrooms: int,
-    alley_width: float,
-    has_so_hong: str,
-    property_type: str,
-    bathrooms: int = 1,
-    direction: str = "Không rõ",
-    floors: int = 1,
-    road_type: str = "Không rõ",
-    position: str = "Không rõ",
-    house_grade: str = "Không rõ",
-    template_columns: Optional[List[str]] = None,
-) -> pd.DataFrame:
-    """
-    Trả về DataFrame 1 dòng khớp đúng cấu trúc template_columns (nếu có).
-    Nếu template_columns is None, tạo 1 template tối giản gồm:
-      ['Area', 'Bedrooms', 'Area_per_Bedroom', 'Alley Width', 'Has_So_Hong', 'Property Type', plus District_...]
-    """
-    # create minimal template if none
-    if template_columns is None:
-        # tạo danh sách district columns từ whitelist
-        district_cols = [f"District_{d}" for d in DISTRICT_WHITELIST]
-        base_cols = ["Area", "Bedrooms", "Area_per_Bedroom", "Alley Width", "Has_So_Hong", "Property Type"]
-        cols = base_cols + district_cols
-        df_row = pd.DataFrame([{c: 0 for c in cols}])
-    else:
-        cols = template_columns.copy()
-        # tạo DataFrame 1 dòng với 0 or appropriate dtypes
-        df_row = pd.DataFrame([{c: 0 for c in cols}])
+bedrooms = st.sidebar.number_input("Số phòng ngủ", min_value=1, max_value=20, value=2, step=1)
+bathrooms = st.sidebar.number_input("Số phòng tắm", min_value=0, max_value=20, value=1, step=1)
+floors = st.sidebar.number_input("Số lầu (tầng)", min_value=0, max_value=50, value=1, step=1)
 
-    # Fill numeric fields if exist
-    if "Area" in df_row.columns:
-        df_row.loc[0, "Area"] = float(area)
-    else:
-        # try some common alternative names
-        for alt in ["area", "AREA", "Diện tích", "Square_Meters", "Area_m2"]:
-            if alt in df_row.columns:
-                df_row.loc[0, alt] = float(area)
-                break
-
-    if "Bedrooms" in df_row.columns:
-        df_row.loc[0, "Bedrooms"] = int(bedrooms)
-    else:
-        for alt in ["Bedrooms", "Bedroom", "beds", "beds_count"]:
-            if alt in df_row.columns:
-                df_row.loc[0, alt] = int(bedrooms)
-                break
-
-    # Alley width common names
-    alley_candidates = [c for c in df_row.columns if "alley" in c.lower() or "width" in c.lower()]
-    if alley_candidates:
-        df_row.loc[0, alley_candidates[0]] = float(alley_width)
-
-    # Area per bedroom interaction
-    if "Area_per_Bedroom" in df_row.columns:
-        df_row.loc[0, "Area_per_Bedroom"] = float(area) / max(1, int(bedrooms))
-    else:
-        # if not present, try to create it if template exists (we prefer not to change column order)
-        if template_columns is None:
-            df_row.loc[0, "Area_per_Bedroom"] = float(area) / max(1, int(bedrooms))
-
-    # Pháp lý -> binary column common names
-    # try to find column like 'Has_So_Hong' or 'Has_So_Rong'
-    legal_candidates = [c for c in df_row.columns if normalize_text("so hong") in normalize_text(c)]
-    if legal_candidates:
-        df_row.loc[0, legal_candidates[0]] = 1 if has_so_hong == "Sổ hồng" else 0
-    else:
-        # fallback: create column if we have minimal template
-        if "Has_So_Hong" in df_row.columns:
-            df_row.loc[0, "Has_So_Hong"] = 1 if has_so_hong == "Sổ hồng" else 0
-
-    # Property type -> set one-hot-like column if available
-    # find a column that contains property_type normalized
-    prop_found = False
-    for c in df_row.columns:
-        if normalize_text(property_type) in normalize_text(c) and ("property" in normalize_text(c) or "type" in normalize_text(c) or "loai" in normalize_text(c)):
-            df_row.loc[0, c] = 1
-            prop_found = True
-            break
-    # If not found but exact column 'Property Type' exists, set text (some models may expect encoded)
-    if not prop_found and "Property Type" in df_row.columns:
-        df_row.loc[0, "Property Type"] = property_type
-
-    # District one-hot: try to find best matching column
-    if any(c.lower().startswith("district_") for c in df_row.columns):
-        best_col = find_best_district_column(selected_district, df_row.columns.tolist())
-        if best_col:
-            # zero out all district_ columns first
-            for c in df_row.columns:
-                if c.lower().startswith("district_"):
-                    df_row.loc[0, c] = 0
-            df_row.loc[0, best_col] = 1
-        else:
-            # if no district column matched, try to add one if template not provided (best effort)
-            if template_columns is None:
-                colname = f"District_{selected_district}"
-                if colname not in df_row.columns:
-                    df_row[colname] = 0
-                # zero others and set this to 1
-                for c in df_row.columns:
-                    if c.startswith("District_"):
-                        df_row.loc[0, c] = 0
-                df_row.loc[0, colname] = 1
-    else:
-        # no district columns in template, optionally create one
-        colname = f"District_{selected_district}"
-        if colname not in df_row.columns:
-            df_row[colname] = 1
-        else:
-            df_row.loc[0, colname] = 1
-
-    # final type conversions (fill NA with 0)
-    df_row = df_row.fillna(0)
-
-    # Bathrooms
-    if "Bathrooms" in df_row.columns:
-        df_row.loc[0, "Bathrooms"] = int(bathrooms)
-
-    # Floors / Lầu
-    if "Floors" in df_row.columns:
-        df_row.loc[0, "Floors"] = int(floors)
-
-    # Direction -> try to match a direction column
-    for c in df_row.columns:
-        if "direction" in c.lower() and normalize_text(direction) in normalize_text(c):
-            df_row.loc[0, c] = 1
-            break
-
-    # Road type -> attempt to set matching one-hot
-    for c in df_row.columns:
-        if "road" in c.lower() or "road type" in c.lower() or "duong" in c.lower():
-            if normalize_text(road_type) in normalize_text(c):
-                df_row.loc[0, c] = 1
-                break
-
-    # Position -> attempt to set matching one-hot
-    for c in df_row.columns:
-        if "position" in c.lower() or "vi tri" in normalize_text(c) or "vị trí" in c:
-            if normalize_text(position) in normalize_text(c):
-                df_row.loc[0, c] = 1
-                break
-
-    # Cấp nhà -> map to any compatible house-grade / class column if the template exposes one.
-    house_grade_candidates = [
-        c
-        for c in df_row.columns
-        if any(
-            keyword in normalize_text(c)
-            for keyword in ["cap nha", "capnha", "house grade", "house class", "house_class", "grade nha"]
-        )
-    ]
-    if house_grade_candidates:
-        house_grade_order = {"Không rõ": 0, "Cấp 1": 1, "Cấp 2": 2, "Cấp 3": 3, "Cấp 4": 4}
-        df_row.loc[0, house_grade_candidates[0]] = house_grade_order.get(house_grade, 0)
-    elif template_columns is None:
-        house_grade_order = {"Không rõ": 0, "Cấp 1": 1, "Cấp 2": 2, "Cấp 3": 3, "Cấp 4": 4}
-        df_row["House_Grade"] = house_grade_order.get(house_grade, 0)
-
-    # ensure column order as template if template provided
-    if template_columns is not None:
-        # Some templates may have columns not created; ensure all present
-        for c in template_columns:
-            if c not in df_row.columns:
-                df_row[c] = 0
-        df_row = df_row[template_columns]  # reorder to template order
-
-    return df_row
-
-
-def align_input_to_model(X: pd.DataFrame, model) -> pd.DataFrame:
-    """
-    Align DataFrame `X` columns to `model` expected feature names.
-    - If model has `feature_names_in_`, add missing cols (zeros), drop extras, reorder.
-    - Else if model has `n_features_in_`, trim or pad numeric columns to match.
-    Returns a DataFrame ready to pass to `model.predict()`.
-    """
-    X2 = X.copy()
-    try:
-        if hasattr(model, "feature_names_in_"):
-            expected = list(model.feature_names_in_)
-            # add missing
-            for c in expected:
-                if c not in X2.columns:
-                    X2[c] = 0
-            # drop extras
-            extras = [c for c in X2.columns if c not in expected]
-            if extras:
-                X2 = X2.drop(columns=extras)
-            # reorder
-            X2 = X2[expected]
-            return X2
-        elif hasattr(model, "n_features_in_"):
-            n = int(model.n_features_in_)
-            # if too many cols, drop extras on the right
-            if X2.shape[1] > n:
-                X2 = X2.iloc[:, :n]
-            # if too few, add zero columns
-            while X2.shape[1] < n:
-                X2[f"pad_{X2.shape[1]}"] = 0
-            return X2
-    except Exception:
-        # if any problem, just return X unchanged
-        return X
-    return X2
-
-
-# Build the row
-feature_row = build_feature_row(
-    selected_district=district,
-    area=area,
-    bedrooms=int(bedrooms),
-    alley_width=float(alley_width),
-    has_so_hong=has_so_hong,
-    property_type=property_type,
-    bathrooms=int(bathrooms),
-    direction=direction,
-    floors=int(floors),
-    road_type=road_type,
-    position=position,
-    house_grade=house_grade,
-    template_columns=template_cols,
+# 4. Thu thập dữ liệu Pháp lý & Loại hình
+has_so_hong = st.sidebar.selectbox("Pháp lý", ["Sổ hồng", "Không rõ / Chưa có", "Sổ đỏ"])
+property_type = st.sidebar.selectbox(
+    "Loại BĐS", 
+    ["Nhà riêng", "Chung cư", "Đất", "Kho, nhà xưởng", "Khách sạn", "Nhà trọ", "Văn phòng", "Khác"]
 )
+direction = st.sidebar.selectbox("Hướng nhà", ["Không rõ", "Bắc", "Nam", "Đông", "Tây", "Đông Bắc", "Tây Bắc", "Đông Nam", "Tây Nam"]) 
 
-st.subheader("Dòng dữ liệu được gửi vào mô hình (preview)")
-st.dataframe(feature_row.T, height=420)  # show as column-vector for readability
+position = st.sidebar.selectbox("Vị trí (position)", ["Không rõ", "Đường chính/Mặt tiền", "Hẻm"]) 
+if position == "Hẻm":
+    alley_width = st.sidebar.number_input("Độ rộng hẻm (m)", min_value=1.0, max_value=12.0, value=4.0, step=0.5)
+    st.sidebar.caption("💡 Hẻm tại TP.HCM thường <= 12m.")
+else:
+    alley_width = 0.0
 
-# Prediction block
-st.markdown("---")
-st.header("2) Dự đoán")
+# ==========================================
+# KHỐI XỬ LÝ DỮ LIỆU THÔ VÀ DỰ ĐOÁN
+# ==========================================
+def build_raw_dataframe() -> pd.DataFrame:
+    """Tạo DataFrame thô, tính toán chiều dài và khoảng cách tự động"""
+    # Xử lý Tên Loại BĐS
+    prop_type_val = "Căn hộ chung cư" if property_type == "Chung cư" else property_type
 
-predict_button = st.button("🚀 Dự đoán giá nhà", type="primary")
-
-if predict_button:
-    # Guard: model must be loaded
-    if model is None:
-        st.error(
-            "Lỗi: ứng dụng không tìm thấy mô hình trên đĩa. Vui lòng kiểm tra:\n"
-            "- results/stacking_model.pkl hoặc\n"
-            "- results/random_forest_model.pkl\n\n"
-            "Ứng dụng đã không thể thực hiện dự đoán."
-        )
+    # Suy luận Loại đường & Vị trí
+    if position == "Đường chính/Mặt tiền":
+        pos_val, auto_road_type = "Đường chính", "Đường nhựa"
+    elif position == "Hẻm":
+        pos_val, auto_road_type = "Trong hẻm", "Đường bê tông"
     else:
-        # Try predicting with the loaded model; if it fails, fallback to random forest
-        X_pred = feature_row.copy()
-        used_model_path = None
-        raw_pred = None
-        # First attempt: use the model that was loaded earlier (likely stacking)
-        try:
-            # align input to model expected features
-            X_aligned = align_input_to_model(X_pred, model)
-            try:
-                raw_pred = model.predict(X_aligned)
-            except Exception:
-                raw_pred = model.predict(X_aligned.values)
-            used_model_path = 'results/stacking_model.pkl' if os.path.exists(os.path.join('results','stacking_model.pkl')) else 'results/random_forest_model.pkl'
-        except Exception as e_primary:
-            # Primary model failed; try loading RF explicitly and predict
-            try:
-                rf_path = os.path.join('results', 'random_forest_model.pkl')
-                if os.path.exists(rf_path):
-                    rf = joblib.load(rf_path)
-                    X_rf = align_input_to_model(X_pred, rf)
-                    try:
-                        raw_pred = rf.predict(X_rf)
-                    except Exception:
-                        raw_pred = rf.predict(X_rf.values)
-                    used_model_path = rf_path
-                else:
-                    raise RuntimeError(f"Primary model failed and fallback RF not found: {e_primary}")
-            except Exception as e_fallback:
-                st.error(f"Có lỗi xảy ra khi dự đoán: {e_fallback}")
+        pos_val, auto_road_type = "Unknown", "Unknown"
 
-        if raw_pred is None:
-            # prediction did not complete
-            if used_model_path is None:
-                st.error("Dự đoán thất bại: không có mô hình thích hợp.")
-        else:
-            # Convert back from log1p space
-            pred_actual = np.expm1(raw_pred).ravel()
-            pred_triệu = float(pred_actual[0])
+    # Xử lý Chiều dài (Length) nội suy từ Diện tích và Chiều ngang
+    calculated_length = float(area) / float(width) if float(width) > 0 else 0.0
 
-            # Show which model was used
-            st.success("🚀 Dự đoán hoàn tất", icon="✅")
-            st.markdown(
-                f"<div style='background:#f6f9ff;padding:18px;border-radius:8px;text-align:center'>"
-                f"<h2 style='color:#0b6ff0;margin:0'>{format_price_triệu(pred_triệu)}</h2>"
-                f"<div style='color:#333;margin-top:6px'>≈ {pred_triệu:,.0f} Triệu VNĐ</div>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-            st.info(
-                f"Model used: `{used_model_path}` — Lưu ý: đây là ước lượng tham khảo."
-            )
+    # Tính Haversine
+    dist_to_center = calculate_haversine_distance(selected_lat, selected_lon)
 
-            # Optional: download CSV with input + prediction
-            csv = feature_row.copy()
-            csv["pred_log1p"] = raw_pred.ravel()
-            csv["pred_triệu"] = pred_triệu
-            csv_bytes = csv.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="Tải file input + dự đoán (.csv)",
-                data=csv_bytes,
-                file_name="input_with_prediction.csv",
-                mime="text/csv",
-            )
+    data = {
+        'Area': [float(area)],
+        'Width': [float(width)],  
+        'Length': [calculated_length], 
+        'Bedrooms': [float(bedrooms)],
+        'Bathrooms': [float(bathrooms)],
+        'Floors': [float(floors)],
+        'Alley Width': [float(alley_width)],
+        'Agent Listing Count': [0.0], # <--- TRẢ LẠI CỘT NÀY LÀM DỮ LIỆU GIẢ ĐỂ BYPASS LỖI
+        'Latitude': [selected_lat], 
+        'Longitude': [selected_lon],
+        'distance_to_center': [dist_to_center],
+        'Direction': [direction if direction != "Không rõ" else "Unknown"],
+        'Road Type': [auto_road_type],
+        'Position': [pos_val],
+        'Property Type': [prop_type_val],
+        'District': [district]
+    }
+    return pd.DataFrame(data)
 
-# Footer: quick diagnostics
+st.header("Dữ liệu đầu vào")
+st.info("Mô hình được sử dụng cho mục đích học tập và minh họa trong phạm vi Đại học. Kết quả dự đoán chỉ mang tính chất tham khảo và cần sự tham khảo từ chuyên gia, không nên sử dụng cho quyết định đầu tư thực tế.")
+
+# Lấy một bản mẫu để hiển thị cho người dùng (Ẩn bớt các cột kỹ thuật để giao diện sạch)
+raw_df_display = build_raw_dataframe()
+cols_to_hide = ['Length', 'Latitude', 'Longitude', 'distance_to_center']
+display_df = raw_df_display.drop(columns=[c for c in cols_to_hide if c in raw_df_display.columns])
+
+st.dataframe(display_df, use_container_width=True)
+
 st.markdown("---")
-st.write("Diagnostics:")
-col_a, col_b = st.columns(2)
-with col_a:
-    st.write("- Model loaded:" , "Yes" if model is not None else "No")
-    st.write("- Template columns loaded:", len(template_cols) if template_cols is not None else "None")
-with col_b:
-    st.write("- Feature vector shape:", feature_row.shape)
-    st.write("- Example feature names:", list(feature_row.columns[:8]))
+st.header("Chính chủ vs Môi giới")
 
-# End of app.py
+if st.button("🚀 Dự đoán ngay!!", type="primary"):
+    if model is None or preprocessor is None:
+        st.error("❌ Không thể dự đoán. Hệ thống thiếu File Model hoặc Preprocessor.")
+    else:
+        try:
+            # 1. TẠO DỮ LIỆU CỐT LÕI (Không liên quan đến Môi giới)
+            df_input = build_raw_dataframe()
+
+            # 2. QUA PREPROCESSOR
+            X_transformed = preprocessor.transform(df_input)
+
+            # Ép kiểu dữ liệu nếu mô hình không hỗ trợ Sparse Matrix
+            import scipy.sparse
+            if scipy.sparse.issparse(X_transformed):
+                X_transformed = X_transformed.toarray()
+
+            # 3. DỰ ĐOÁN BẰNG AI (CHỈ 1 LẦN) ĐỂ LẤY GIÁ GỐC
+            pred_log = model.predict(X_transformed)
+            gia_chinh_chu = float(np.expm1(pred_log)[0])
+
+            # 4. BUSINESS RULE (Quy tắc ngành): CỘNG 2% HOA HỒNG MÔI GIỚI
+            ty_le_hoa_hong = 0.02
+            chenh_lech = gia_chinh_chu * ty_le_hoa_hong
+            gia_moi_gioi = gia_chinh_chu + chenh_lech
+            phan_tram_chenh = ty_le_hoa_hong * 100
+
+            # HIỂN THỊ KẾT QUẢ TRỰC QUAN
+            st.success("✅ Hệ thống đã phân tích thành công. Dưới đây là kết quả dự đoán giá trị BĐS khi giao dịch chính chủ và qua môi giới.")
+            
+            colA, colB = st.columns(2)
+            with colA:
+                st.markdown(
+                    f"<div style='background:#f6f9ff;padding:20px;border-radius:10px;text-align:center;border:1px solid #e1e4e8'>"
+                    f"<h4 style='color:#333;margin:0'>🏡 Chính chủ</h4>"
+                    f"<h2 style='color:#0b6ff0;margin:10px 0'>{format_price_triệu(gia_chinh_chu)}</h2>"
+                    f"<div style='color:#666;font-size:14px'>≈ {gia_chinh_chu:,.0f} Triệu VNĐ</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+            
+            with colB:
+                st.markdown(
+                    f"<div style='background:#fffcf6;padding:20px;border-radius:10px;text-align:center;border:1px solid #fbe6c4'>"
+                    f"<h4 style='color:#333;margin:0'>🤝 Môi giới</h4>"
+                    f"<h2 style='color:#f28500;margin:10px 0'>{format_price_triệu(gia_moi_gioi)}</h2>"
+                    f"<div style='color:#666;font-size:14px'>≈ {gia_moi_gioi:,.0f} Triệu VNĐ</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+            # BÌNH LUẬN CỦA HỆ THỐNG
+            st.info(f"💡 Dựa trên việc tìm hiểu thị trường, hệ thống tính toán cộng thêm **{phan_tram_chenh:.0f}%** (tương đương chênh lệch **{chenh_lech:,.0f} Triệu VNĐ**) đại diện cho chi phí hoa hồng và marketing nếu giao dịch được thực hiện qua kênh môi giới.")
+
+        except Exception as e:
+            st.error(f"❌ Có lỗi trong luồng biến đổi dữ liệu: {e}")
