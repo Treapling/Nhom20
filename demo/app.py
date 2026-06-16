@@ -148,7 +148,7 @@ preprocessor = load_preprocessor()
 if model is None or preprocessor is None:
     st.sidebar.error("❌ Thiếu file Model hoặc Preprocessor trong thư mục results/")
 else:
-    st.sidebar.success("✅ Hệ thống AI đã sẵn sàng.")
+    st.sidebar.success("Đã chọn mô hình dự đoán.")
 st.sidebar.markdown("---")
 
 # 2. Thu thập dữ liệu Vị trí (Quận -> Phường)
@@ -159,20 +159,26 @@ ward = st.sidebar.selectbox("Chọn Phường/Xã", ward_options, index=0)
 # Lấy tọa độ dựa trên Phường đã chọn
 selected_lat, selected_lon = LOCATION_DATA[district][ward]
 
-# 3. Thu thập dữ liệu Vật lý
-area = st.sidebar.number_input("Diện tích (m²)", min_value=10.0, max_value=1000.0, value=60.0, step=1.0)
-width = st.sidebar.number_input("Chiều ngang mặt tiền (m)", min_value=1.0, max_value=100.0, value=4.0, step=0.1)
-
-bedrooms = st.sidebar.number_input("Số phòng ngủ", min_value=1, max_value=20, value=2, step=1)
-bathrooms = st.sidebar.number_input("Số phòng tắm", min_value=0, max_value=20, value=1, step=1)
-floors = st.sidebar.number_input("Số lầu (tầng)", min_value=0, max_value=50, value=1, step=1)
-
-# 4. Thu thập dữ liệu Pháp lý & Loại hình
-has_so_hong = st.sidebar.selectbox("Pháp lý", ["Sổ hồng", "Không rõ / Chưa có", "Sổ đỏ"])
+# 3. Thu thập Loại hình BĐS
 property_type = st.sidebar.selectbox(
     "Loại BĐS", 
     ["Nhà riêng", "Chung cư", "Đất", "Kho, nhà xưởng", "Khách sạn", "Nhà trọ", "Văn phòng", "Khác"]
 )
+
+# 4. Thu thập dữ liệu Vật lý linh hoạt dựa trên Loại BĐS
+area = st.sidebar.number_input("Diện tích (m²)", min_value=10.0, max_value=1000.0, value=60.0, step=1.0)
+width = st.sidebar.number_input("Chiều ngang mặt tiền (m)", min_value=1.0, max_value=100.0, value=4.0, step=0.1)
+
+# Xử lý ẩn/hiện logic cho "Đất"
+if property_type == "Đất":
+    bedrooms = 0
+    bathrooms = 0
+    floors = 0
+else:
+    bedrooms = st.sidebar.number_input("Số phòng ngủ", min_value=1, max_value=20, value=2, step=1)
+    bathrooms = st.sidebar.number_input("Số phòng tắm", min_value=0, max_value=20, value=1, step=1)
+    floors = st.sidebar.number_input("Số lầu (tầng)", min_value=0, max_value=50, value=1, step=1)
+
 direction = st.sidebar.selectbox("Hướng nhà", ["Không rõ", "Bắc", "Nam", "Đông", "Tây", "Đông Bắc", "Tây Bắc", "Đông Nam", "Tây Nam"]) 
 
 position = st.sidebar.selectbox("Vị trí (position)", ["Không rõ", "Đường chính/Mặt tiền", "Hẻm"]) 
